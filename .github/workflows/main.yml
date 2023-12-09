@@ -1,16 +1,35 @@
-name: Push-to-EC2
-
-# Trigger deployment only on push to main branch
+name: Build & Docker Image Build
+ 
 on:
   push:
-    branches:
-      - main
-
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+ 
 jobs:
-  deploy:
-    name: Deploy to EC2 on main branch push
+  build:
     runs-on: ubuntu-latest
+    steps:
+     - name: Checkout code
+       uses: actions/checkout@v3
 
+     - name: Build the Docker image
+       run: docker build . --file Dockerfile --tag shivani142/webimage:latest
+ 
+     - name: Login to Dockerhub
+       uses: docker/login-action@v1
+       with:
+         username: ${{ secrets.DOC_USERNAME }}
+         password: ${{ secrets.DOC_PASSWORD }}
+ 
+     - name: Push Docker image to Docker Hub
+       run: |
+          docker push shivani142/webimage:latest
+            
+  deploy:
+    name: Deploy to EC2 on master branch push
+    runs-on: ubuntu-latest
+  
     steps:
       - name: Checkout the files
         uses: actions/checkout@v2
@@ -30,9 +49,7 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo apt-get -y update
-            sudo apt-get install -y apache2
-            sudo systemctl start apache2
-            sudo systemctl enable apache2
-            cd home
-            sudo mv * /var/www/html
+            docker pull shivani142/webimage:latest
+            docker stop webimage && docker rm webimage
+            docker run -d -p 80:80 --name webapp shivani142/webimage:latest
+            docker image prune -f
